@@ -9,6 +9,7 @@ env:
   REGISTRY: docker.io
   IMAGE_NAME: ${{ github.repository }}
   PROJECT_DIR: .
+  RUNNER_VERSION: 2.319.1
 
 jobs:
   build:
@@ -42,7 +43,7 @@ jobs:
           tags: |
             # set latest tag for default branch
             type=raw,value=latest,enable={{is_default_branch}}
-            type=semver,pattern={{version}}
+            type=semver,pattern=${{ env.RUNNER_VERSION }}
 
       - name: build and push
         uses: docker/build-push-action@v6
@@ -53,7 +54,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            RUNNER_VERSION=2.319.1
+            RUNNER_VERSION=${{ env.RUNNER_VERSION }}
 
       - name: install cosign
         uses: sigstore/cosign-installer@v3.8.1
