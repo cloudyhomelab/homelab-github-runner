@@ -17,10 +17,4 @@ set -euo pipefail
   --disableupdate \
   --replace
 
-cleanup() {
-  echo "Removing runner ${GH_RUNNER_NAME}..."
-  ./config.sh remove --unattended
-}
-trap cleanup EXIT
-
 ./run.sh
