@@ -17,9 +17,9 @@ target "image" {
   }
 
   labels = {
-    org.opencontainers.image.title="homelab-github-runner"
-    org.opencontainers.image.description="Ephemeral GitHub Actions runner used in homelab"
-    org.opencontainers.image.version="${GH_RUNNER_VERSION}"
+    "org.opencontainers.image.title" = "homelab-github-runner"
+    "org.opencontainers.image.description" = "Ephemeral GitHub Actions runner used in homelab"
+    "org.opencontainers.image.version" = "${GH_RUNNER_VERSION}"
   }
 
   tags = [
