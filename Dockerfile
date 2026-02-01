@@ -1,8 +1,9 @@
-FROM debian:stable-slim
+ARG RUNNER_VERSION="unknown"
+
+FROM debian:13-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
-
-ARG RUNNER_VERSION=2.330.0
+ARG RUNNER_VERSION
 
 # Base deps
 RUN apt-get update && \
@@ -35,7 +36,3 @@ USER runner
 WORKDIR /home/runner/actions-runner
 
 ENTRYPOINT ["/entrypoint.sh"]
-
-LABEL org.opencontainers.image.title="homelab-github-runner" \
-      org.opencontainers.image.description="Ephemeral GitHub Actions runner used in homelab" \
-      org.opencontainers.image.version="${RUNNER_VERSION}" \
