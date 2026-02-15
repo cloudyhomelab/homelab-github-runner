@@ -15,11 +15,13 @@ RUN set -eu; \
     [ "${RUNNER_CHECKSUM}" != "unknown" ] || { echo "ERROR: RUNNER_CHECKSUM is not set"; exit 2; }; \
     apt-get update \
     && apt-get install -y --no-install-recommends \
+    ansible \
     curl \
     ca-certificates \
     git \
     jq \
     make \
+    shellcheck \
     sudo \
     unzip \
     libicu76 \
