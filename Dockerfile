@@ -16,17 +16,18 @@ RUN set -eu; \
     apt-get update \
     && apt-get install -y --no-install-recommends \
     ansible \
-    curl \
     ca-certificates \
+    curl \
     git \
     jq \
+    libicu-dev \
+    libicu76 \
+    libssl-dev \
     make \
+    openssh-client \
     shellcheck \
     sudo \
     unzip \
-    libicu76 \
-    libicu-dev \
-    libssl-dev \
     && apt-get -y autoremove \
     && apt-get autoclean \
     && apt-get clean \
