@@ -5,6 +5,8 @@ variable "IMAGE_NAME" { default = "github-runner" }
 variable "GH_RUNNER_VERSION" { default = "2.331.0" }
 variable "GH_RUNNER_CHECKSUM" { default = "5fcc01bd546ba5c3f1291c2803658ebd3cedb3836489eda3be357d41bfcf28a7" }
 
+variable "LOCAL" { default = false }
+
 group "default" {
   targets = ["image"]
 }
@@ -29,10 +31,5 @@ target "image" {
     "${REGISTRY}/${NAMESPACE}/${IMAGE_NAME}:latest",
   ]
 
-  platforms = ["linux/amd64"]
-}
-
-target "image-all" {
-  inherits = ["image"]
-  platforms = ["linux/amd64", "linux/arm64"]
+  platforms = LOCAL ? [] : ["linux/amd64", "linux/arm64"]
 }

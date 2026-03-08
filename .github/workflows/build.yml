@@ -6,6 +6,9 @@ on:
     branches:
       - main
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+
 env:
   REGISTRY: docker.io
 
@@ -37,7 +40,7 @@ jobs:
         id: bake
         uses: docker/bake-action@v6
         with:
-          targets: image-all
+          targets: default
           push: true
           set: |
             *.attest=type=provenance,mode=max
@@ -47,11 +50,12 @@ jobs:
         uses: sigstore/cosign-installer@v4.0.0
 
       - name: sign published image(s) (keyless)
-        env:
-          BAKE_METADATA: ${{ steps.bake.outputs.metadata }}
         run: |
           set -euo pipefail
-          echo "${BAKE_METADATA}" > bake-metadata.json
+
+          cat > bake-metadata.json <<'JSON'
+          ${{ steps.bake.outputs.metadata }}
+          JSON
 
           # Extract tag@digest refs from Bake metadata and sign them.
           jq -r '
