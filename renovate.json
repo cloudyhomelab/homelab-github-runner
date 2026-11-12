@@ -1,10 +1,21 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "enabledManagers": ["github-actions", "dockerfile", "pip_requirements"],
+  "enabledManagers": ["github-actions", "dockerfile", "pip_requirements", "custom.regex"],
   "dependencyDashboard": false,
   "semanticCommits": "enabled",
   "semanticCommitScope": null,
   "platformCommit": "enabled",
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "the actions/runner release the image is built from",
+      "managerFilePatterns": ["/^docker-bake\\.hcl$/"],
+      "matchStrings": ["variable \"GH_RUNNER_VERSION\"\\s*\\{\\s*default\\s*=\\s*\"(?<currentValue>[^\"]+)\""],
+      "depNameTemplate": "actions/runner",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.+)$"
+    }
+  ],
   "packageRules": [
     {
       "matchManagers": ["github-actions"],
@@ -18,6 +29,18 @@
     {
       "matchManagers": ["pip_requirements"],
       "semanticCommitType": "ci"
+    },
+    {
+      "description": "the image runs the runner with --disableupdate and GitHub stops sending jobs to a runner 30 days behind a release, so the bump merges itself",
+      "matchDepNames": ["actions/runner"],
+      "semanticCommitType": "build",
+      "automerge": true,
+      "automergeStrategy": "squash",
+      "postUpgradeTasks": {
+        "commands": ["python3 tools/bump_runner.py {{{newVersion}}}"],
+        "fileFilters": ["docker-bake.hcl"],
+        "executionMode": "update"
+      }
     }
   ]
 }

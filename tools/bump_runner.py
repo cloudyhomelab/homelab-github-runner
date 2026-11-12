@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Move docker-bake.hcl to the latest actions/runner release.
+"""Pin docker-bake.hcl to an actions/runner release, with the checksums of its Linux tarballs.
 
-The image runs the runner with --disableupdate, and GitHub stops scheduling jobs on
-runners more than 30 days behind a release, so the bump must not depend on anyone
-noticing the release.
+Renovate picks the version and runs this as a post-upgrade task; the checksums come from
+the release notes because the release attaches no checksum file.
 """
 
 from __future__ import annotations
@@ -18,14 +17,17 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-RELEASES_URL = "https://api.github.com/repos/actions/runner/releases/latest"
+RELEASE_URL = "https://api.github.com/repos/actions/runner/releases/tags/v{version}"
 BAKE_FILE = Path(__file__).resolve().parent.parent / "docker-bake.hcl"
 # bake variable per checksum, keyed by the tarball architecture the release notes use
 CHECKSUM_VARIABLES = {"linux-x64": "GH_RUNNER_CHECKSUM_X64", "linux-arm64": "GH_RUNNER_CHECKSUM_ARM64"}
 
+VERSION = re.compile(r"^\d+\.\d+\.\d+$")
 TAG = re.compile(r"^v(\d+\.\d+\.\d+)$")
 # the release notes carry every tarball's SHA-256 between these markers
 CHECKSUM = re.compile(r"<!-- BEGIN SHA (?P<arch>[a-z0-9-]+) -->(?P<sha>[0-9a-f]{64})<!-- END SHA (?P=arch) -->")
+
+USAGE = "usage: bump_runner.py VERSION [BAKE_FILE]"
 
 
 class ApiError(Exception):
@@ -60,19 +62,23 @@ class Release:
         return variables
 
 
-def fetch_latest_release(token: str | None = None) -> Release:
+def fetch_release(version: str, token: str | None = None) -> Release:
+    url = RELEASE_URL.format(version=version)
     headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
-    request = urllib.request.Request(RELEASES_URL, headers=headers)
+    request = urllib.request.Request(url, headers=headers)
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
-            return Release.from_api(json.load(response))
+            release = Release.from_api(json.load(response))
     except urllib.error.HTTPError as error:
         body = error.read().decode(errors="replace").strip()
-        raise ApiError(f"GET {RELEASES_URL} returned HTTP {error.code}: {body}") from error
+        raise ApiError(f"GET {url} returned HTTP {error.code}: {body}") from error
     except urllib.error.URLError as error:
-        raise ApiError(f"GET {RELEASES_URL} failed: {error.reason}") from error
+        raise ApiError(f"GET {url} failed: {error.reason}") from error
+    if release.version != version:
+        raise ApiError(f"GET {url} returned release {release.version}")
+    return release
 
 
 def _default_pattern(name: str) -> re.Pattern:
@@ -91,31 +97,26 @@ def set_variable(text: str, name: str, value: str) -> str:
     return _default_pattern(name).sub(lambda match: f"{match.group(1)}{value}{match.group(3)}", text)
 
 
-def bump(bake_file: Path, release: Release) -> str | None:
-    """Rewrite the bake file for `release`; return the previous version, or None when already there."""
+def pin(bake_file: Path, release: Release) -> None:
     text = bake_file.read_text()
-    current = read_variable(text, "GH_RUNNER_VERSION")
-    if current == release.version:
-        return None
     for name, value in release.bake_variables().items():
         text = set_variable(text, name, value)
     bake_file.write_text(text)
-    return current
 
 
 def main(argv: Sequence[str]) -> int:
-    bake_file = Path(argv[0]) if argv else BAKE_FILE
+    if not 1 <= len(argv) <= 2 or not VERSION.match(argv[0]):
+        print(USAGE, file=sys.stderr)
+        return 2
+    version = argv[0]
+    bake_file = Path(argv[1]) if len(argv) == 2 else BAKE_FILE
     try:
-        release = fetch_latest_release(os.environ.get("GITHUB_TOKEN"))
-        previous = bump(bake_file, release)
+        release = fetch_release(version, os.environ.get("GITHUB_TOKEN"))
+        pin(bake_file, release)
     except (ApiError, BakeError, OSError) as error:
         print(error, file=sys.stderr)
         return 1
-    if previous is None:
-        print(f"{bake_file.name} is already at runner {release.version}", file=sys.stderr)
-        return 0
-    print(f"{bake_file.name}: runner {previous} -> {release.version}", file=sys.stderr)
-    print(release.version)
+    print(f"{bake_file.name}: pinned runner {release.version} and its checksums", file=sys.stderr)
     return 0
 
 
