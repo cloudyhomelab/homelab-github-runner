@@ -64,8 +64,8 @@ GitHub before exiting.
 ## Inside the container
 
 Jobs run as the unprivileged user `runner` on Debian 13 with these tools
-preinstalled: `ansible`, `git`, `jq`, `make`, `openssh-client`, `packer`,
-`python3` (with `pip` and `venv`), `shellcheck`, `terraform`, `unzip`, `zstd`.
+preinstalled: `ansible`, `git`, `jq`, `make`, `nodejs`, `openssh-client`,
+`python3` (with `pip` and `venv`), `shellcheck`, `unzip`, `zstd`.
 
 The only permitted `sudo` command installs Debian packages:
 
