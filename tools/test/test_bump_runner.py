@@ -57,8 +57,8 @@ class TestRelease:
         }
 
 
-class TestFetchLatestRelease:
-    def test_sends_the_api_headers_and_parses_the_release(self, monkeypatch):
+class TestFetchRelease:
+    def test_asks_for_the_tagged_release_and_parses_it(self, monkeypatch):
         seen = {}
 
         def fake_urlopen(request, timeout):
@@ -66,9 +66,9 @@ class TestFetchLatestRelease:
             return io.BytesIO(json.dumps(PAYLOAD).encode())
 
         monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
-        assert bump_runner.fetch_latest_release() == RELEASE
+        assert bump_runner.fetch_release("2.338.0") == RELEASE
         request = seen["request"]
-        assert request.full_url == bump_runner.RELEASES_URL
+        assert request.full_url == "https://api.github.com/repos/actions/runner/releases/tags/v2.338.0"
         assert request.get_method() == "GET"
         assert request.get_header("Accept") == "application/vnd.github+json"
         assert not request.has_header("Authorization")
@@ -82,16 +82,23 @@ class TestFetchLatestRelease:
 
         monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
         with pytest.raises(bump_runner.ApiError):
-            bump_runner.fetch_latest_release("ghp_x")
+            bump_runner.fetch_release("2.338.0", "ghp_x")
         assert seen["request"].get_header("Authorization") == "Bearer ghp_x"
+
+    def test_rejects_a_release_for_another_version(self, monkeypatch):
+        monkeypatch.setattr(
+            urllib.request, "urlopen", lambda request, timeout: io.BytesIO(json.dumps(PAYLOAD).encode())
+        )
+        with pytest.raises(bump_runner.ApiError, match="returned release 2.338.0"):
+            bump_runner.fetch_release("2.339.0")
 
     def test_http_error_includes_status_and_body(self, monkeypatch):
         def fake_urlopen(request, timeout):
-            raise urllib.error.HTTPError(request.full_url, 403, "Forbidden", {}, io.BytesIO(b"rate limited"))
+            raise urllib.error.HTTPError(request.full_url, 404, "Not Found", {}, io.BytesIO(b"no such release"))
 
         monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
-        with pytest.raises(bump_runner.ApiError, match="HTTP 403: rate limited"):
-            bump_runner.fetch_latest_release()
+        with pytest.raises(bump_runner.ApiError, match="HTTP 404: no such release"):
+            bump_runner.fetch_release("2.338.0")
 
     def test_connection_error_is_reported(self, monkeypatch):
         def fake_urlopen(request, timeout):
@@ -99,7 +106,7 @@ class TestFetchLatestRelease:
 
         monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
         with pytest.raises(bump_runner.ApiError, match="connection refused"):
-            bump_runner.fetch_latest_release()
+            bump_runner.fetch_release("2.338.0")
 
 
 class TestBakeVariables:
@@ -127,71 +134,71 @@ class TestBakeVariables:
             assert bump_runner.read_variable(text, name).startswith("sha256:")
 
 
-class TestBump:
-    def test_rewrites_all_three_variables(self, tmp_path):
+class TestPin:
+    def test_rewrites_all_three_variables_and_keeps_the_layout(self, tmp_path):
         bake_file = tmp_path / "docker-bake.hcl"
         bake_file.write_text(BAKE)
-        assert bump_runner.bump(bake_file, RELEASE) == "2.337.0"
+        bump_runner.pin(bake_file, RELEASE)
         text = bake_file.read_text()
         assert bump_runner.read_variable(text, "GH_RUNNER_VERSION") == "2.338.0"
         assert bump_runner.read_variable(text, "GH_RUNNER_CHECKSUM_X64") == f"sha256:{X64}"
         assert bump_runner.read_variable(text, "GH_RUNNER_CHECKSUM_ARM64") == f"sha256:{ARM64}"
         assert text.count("\n") == BAKE.count("\n")
 
-    def test_leaves_a_current_file_untouched(self, tmp_path):
+    def test_fills_the_checksums_when_the_version_is_already_set(self, tmp_path):
         bake_file = tmp_path / "docker-bake.hcl"
-        bake_file.write_text(BAKE)
-        before = bake_file.stat().st_mtime_ns
-        assert bump_runner.bump(bake_file, bump_runner.Release("2.337.0", RELEASE.checksums)) is None
-        assert bake_file.read_text() == BAKE
-        assert bake_file.stat().st_mtime_ns == before
+        bake_file.write_text(BAKE.replace("2.337.0", "2.338.0"))
+        bump_runner.pin(bake_file, RELEASE)
+        assert bump_runner.read_variable(bake_file.read_text(), "GH_RUNNER_CHECKSUM_X64") == f"sha256:{X64}"
 
 
 class TestMain:
-    def test_prints_the_new_version_on_stdout(self, monkeypatch, tmp_path, capsys):
-        monkeypatch.setattr(bump_runner, "fetch_latest_release", lambda token: RELEASE)
+    def test_pins_the_requested_version(self, monkeypatch, tmp_path, capsys):
+        seen = {}
+
+        def fetch(version, token):
+            seen["version"] = version
+            return RELEASE
+
+        monkeypatch.setattr(bump_runner, "fetch_release", fetch)
         bake_file = tmp_path / "docker-bake.hcl"
         bake_file.write_text(BAKE)
-        assert bump_runner.main([str(bake_file)]) == 0
-        out, err = capsys.readouterr()
-        assert out == "2.338.0\n"
-        assert "2.337.0 -> 2.338.0" in err
+        assert bump_runner.main(["2.338.0", str(bake_file)]) == 0
+        assert seen["version"] == "2.338.0"
+        assert bump_runner.read_variable(bake_file.read_text(), "GH_RUNNER_VERSION") == "2.338.0"
+        assert "pinned runner 2.338.0" in capsys.readouterr().err
 
-    def test_prints_nothing_when_current(self, monkeypatch, tmp_path, capsys):
-        monkeypatch.setattr(bump_runner, "fetch_latest_release", lambda token: RELEASE)
-        bake_file = tmp_path / "docker-bake.hcl"
-        bake_file.write_text(BAKE.replace("2.337.0", "2.338.0"))
-        assert bump_runner.main([str(bake_file)]) == 0
-        out, err = capsys.readouterr()
-        assert out == ""
-        assert "already at runner 2.338.0" in err
+    @pytest.mark.parametrize("argv", [[], ["v2.338.0"], ["2.338"], ["2.338.0", "a.hcl", "b.hcl"]])
+    def test_rejects_bad_arguments(self, argv, capsys):
+        assert bump_runner.main(argv) == 2
+        assert "usage:" in capsys.readouterr().err
 
     def test_passes_the_token_from_the_environment(self, monkeypatch, tmp_path):
         seen = {}
 
-        def fetch(token):
+        def fetch(version, token):
             seen["token"] = token
             return RELEASE
 
         monkeypatch.setenv("GITHUB_TOKEN", "ghs_y")
-        monkeypatch.setattr(bump_runner, "fetch_latest_release", fetch)
+        monkeypatch.setattr(bump_runner, "fetch_release", fetch)
         bake_file = tmp_path / "docker-bake.hcl"
         bake_file.write_text(BAKE)
-        bump_runner.main([str(bake_file)])
+        bump_runner.main(["2.338.0", str(bake_file)])
         assert seen["token"] == "ghs_y"
 
     def test_api_failure_exits_1_without_touching_the_file(self, monkeypatch, tmp_path, capsys):
-        def fail(token):
+        def fail(version, token):
             raise bump_runner.ApiError("HTTP 500")
 
-        monkeypatch.setattr(bump_runner, "fetch_latest_release", fail)
+        monkeypatch.setattr(bump_runner, "fetch_release", fail)
         bake_file = tmp_path / "docker-bake.hcl"
         bake_file.write_text(BAKE)
-        assert bump_runner.main([str(bake_file)]) == 1
+        assert bump_runner.main(["2.338.0", str(bake_file)]) == 1
         assert bake_file.read_text() == BAKE
         assert "HTTP 500" in capsys.readouterr().err
 
     def test_missing_bake_file_exits_1(self, monkeypatch, tmp_path, capsys):
-        monkeypatch.setattr(bump_runner, "fetch_latest_release", lambda token: RELEASE)
-        assert bump_runner.main([str(tmp_path / "missing.hcl")]) == 1
+        monkeypatch.setattr(bump_runner, "fetch_release", lambda version, token: RELEASE)
+        assert bump_runner.main(["2.338.0", str(tmp_path / "missing.hcl")]) == 1
         assert "missing.hcl" in capsys.readouterr().err
