@@ -1,0 +1,44 @@
+name: renovate
+
+on:
+  schedule:
+    - cron: '0 5 * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: renovate
+  cancel-in-progress: false
+
+jobs:
+  renovate:
+    # a hosted runner, so a broken runner image cannot block the updates that fix it
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      # a pull request opened with GITHUB_TOKEN starts no workflow run, so verify would not run
+      - name: mint a token for the bot
+        id: bot
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ secrets.CLOUDYHOME_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.CLOUDYHOME_BOT_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          # github-actions updates edit files under .github/workflows
+          permission-workflows: write
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: run renovate
+        env:
+          RENOVATE_TOKEN: ${{ steps.bot.outputs.token }}
+          RENOVATE_PLATFORM: github
+          RENOVATE_REPOSITORIES: ${{ github.repository }}
+          RENOVATE_ONBOARDING: 'false'
+          RENOVATE_REQUIRE_CONFIG: required
+        run: npx --yes renovate@44.190.0

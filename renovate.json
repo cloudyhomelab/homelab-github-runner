@@ -1,0 +1,23 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "enabledManagers": ["github-actions", "dockerfile", "pip_requirements"],
+  "dependencyDashboard": false,
+  "semanticCommits": "enabled",
+  "semanticCommitScope": null,
+  "platformCommit": "enabled",
+  "packageRules": [
+    {
+      "matchManagers": ["github-actions"],
+      "semanticCommitType": "ci",
+      "groupName": "github-actions"
+    },
+    {
+      "matchManagers": ["dockerfile"],
+      "semanticCommitType": "build"
+    },
+    {
+      "matchManagers": ["pip_requirements"],
+      "semanticCommitType": "ci"
+    }
+  ]
+}
