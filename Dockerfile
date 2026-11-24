@@ -4,7 +4,7 @@ ARG RUNNER_CHECKSUM_ARM64="unknown"
 ARG RUNNER_USER="runner"
 
 # fetch the runner natively; only the tarball is arch-specific
-FROM --platform=$BUILDPLATFORM debian:13-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2 AS runner
+FROM --platform=$BUILDPLATFORM debian:13-slim@sha256:8aa5a7bf5a1955bddbe7d74fcdd0b91ab30e74362a8b73af672b0481b35b44a0 AS runner
 SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 
 ARG TARGETARCH
@@ -29,7 +29,7 @@ RUN [ "${RUNNER_VERSION}" != "unknown" ] || { echo "ERROR: RUNNER_VERSION is not
     && tar xzf actions-runner.tar.gz -C /actions-runner
 
 
-FROM debian:13-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2
+FROM debian:13-slim@sha256:8aa5a7bf5a1955bddbe7d74fcdd0b91ab30e74362a8b73af672b0481b35b44a0
 SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 
 ARG RUNNER_USER
